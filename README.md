@@ -1,4 +1,7 @@
 # AlwaysShowUraCrowns
+| Mono | IL2CPP |
+|:--:|:--:|
+|✅|✅|
  
 This is a mod for Taiko no Tatsujin: The Drum Master!\
 It will always show Ura crowns at the top left table of the song select menu, even if the selected song doesn't have an ura chart.\
