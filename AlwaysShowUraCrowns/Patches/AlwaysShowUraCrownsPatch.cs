@@ -22,22 +22,29 @@ namespace AlwaysShowUraCrowns.Patches
             foreach (MusicDataInterface.MusicInfoAccesser musicInfoAccesser in musicInfoAccessers)
             {
                 int num = 5;
-                for (int i = 0; i < num; i++)
+                try
                 {
-                    EnsoRecordInfo ensoRecordInfo;
-                    playData.GetPlayerRecordInfo(playerId, musicInfoAccesser.UniqueId, (EnsoData.EnsoLevelType)i, out ensoRecordInfo);
-                    switch (ensoRecordInfo.crown)
+                    for (int i = 0; i < num; i++)
                     {
-                        case DataConst.CrownType.Silver:
-                            array[0, i]++;
-                            break;
-                        case DataConst.CrownType.Gold:
-                            array[1, i]++;
-                            break;
-                        case DataConst.CrownType.Rainbow:
-                            array[2, i]++;
-                            break;
+                        EnsoRecordInfo ensoRecordInfo;
+                        playData.GetPlayerRecordInfo(playerId, musicInfoAccesser.UniqueId, (EnsoData.EnsoLevelType)i, out ensoRecordInfo);
+                        switch (ensoRecordInfo.crown)
+                        {
+                            case DataConst.CrownType.Silver:
+                                array[0, i]++;
+                                break;
+                            case DataConst.CrownType.Gold:
+                                array[1, i]++;
+                                break;
+                            case DataConst.CrownType.Rainbow:
+                                array[2, i]++;
+                                break;
+                        }
                     }
+                }
+                catch (Exception e)
+                {
+                    ModLogger.Log(e.Message, LogType.Error);
                 }
             }
             for (int j = 0; j < 5; j++)
@@ -68,12 +75,19 @@ namespace AlwaysShowUraCrowns.Patches
                 __instance.rootAnim.Play("Ura");
                 __instance.bestScores[4].RootObject.SetValue(1);
             }
-            for (int i = 0; i < num; i++)
+            try
             {
-                EnsoRecordInfo ensoRecordInfo;
-                TaikoSingletonMonoBehaviour<CommonObjects>.Instance.MyDataManager.PlayData.GetPlayerRecordInfo(playerId, musicUniqueId, (EnsoData.EnsoLevelType)i, out ensoRecordInfo);
+                for (int i = 0; i < num; i++)
+                {
+                    EnsoRecordInfo ensoRecordInfo;
+                    TaikoSingletonMonoBehaviour<CommonObjects>.Instance.MyDataManager.PlayData.GetPlayerRecordInfo(playerId, musicUniqueId, (EnsoData.EnsoLevelType)i, out ensoRecordInfo);
 
-                __instance.bestScores[i].RootObject.SetValue(ensoRecordInfo.normalHiScore.score);
+                    __instance.bestScores[i].RootObject.SetValue(ensoRecordInfo.normalHiScore.score);
+                }
+            }
+            catch (Exception e)
+            {
+                ModLogger.Log(e.Message, LogType.Error);
             }
             return false;
         }

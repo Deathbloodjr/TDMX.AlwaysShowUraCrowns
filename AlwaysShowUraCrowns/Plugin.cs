@@ -1,12 +1,15 @@
 ﻿using BepInEx;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using SaveProfileManager.Patches;
 using System;
 using System.Collections;
+using System.IO;
+using System.Reflection;
 using UnityEngine;
-using BepInEx.Configuration;
 
-#if TAIKO_IL2CPP
+#if IL2CPP
 using BepInEx.Unity.IL2CPP.Utils;
 using BepInEx.Unity.IL2CPP;
 #endif
@@ -15,63 +18,155 @@ using AlwaysShowUraCrowns.Patches;
 
 namespace AlwaysShowUraCrowns
 {
-    [BepInPlugin(PluginInfo.PLUGIN_GUID, "Always Show Ura Crowns", PluginInfo.PLUGIN_VERSION)]
-#if TAIKO_MONO
+    [BepInPlugin(MyPluginInfo.PLUGIN_GUID, ModName, MyPluginInfo.PLUGIN_VERSION)]
+#if TDMX_MONO
     public class Plugin : BaseUnityPlugin
-#elif TAIKO_IL2CPP
+#elif TDMX_IL2CPP
     public class Plugin : BasePlugin
 #endif
     {
+        public const string ModName = "AlwaysShowUraCrowns";
+
         public static Plugin Instance;
         private Harmony _harmony;
         public new static ManualLogSource Log;
 
         public ConfigEntry<bool> ConfigEnabled;
 
-#if TAIKO_MONO
+#if TDMX_MONO
         private void Awake()
-#elif TAIKO_IL2CPP
+#elif TDMX_IL2CPP
         public override void Load()
 #endif
         {
             Instance = this;
 
-#if TAIKO_MONO
+#if TDMX_MONO
             Log = Logger;
-#elif TAIKO_IL2CPP
+#elif TDMX_IL2CPP
             Log = base.Log;
 #endif
 
-            SetupConfig();
+            SetupConfig(Config, Path.Combine("BepInEx", "data", ModName));
             SetupHarmony();
+
+
+            var isSaveManagerLoaded = IsSaveManagerLoaded();
+            if (isSaveManagerLoaded)
+            {
+                AddToSaveManager();
+            }
         }
 
-        private void SetupConfig()
+        private void SetupConfig(ConfigFile config, string saveFolder, bool isSaveManager = false)
         {
-            // I never really used this
-            // I'd rather just use a folder in BepInEx's folder for storing information
-            var userFolder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string dataFolder = Path.Combine("BepInEx", "data", ModName);
 
-            ConfigEnabled = Config.Bind("General",
-                "Enabled",
-                true,
-                "Enables the mod.");
-
+            if (!isSaveManager)
+            {
+                ConfigEnabled = config.Bind("General",
+                   "Enabled",
+                   true,
+                   "Enables the mod.");
+            }
         }
 
         private void SetupHarmony()
         {
             // Patch methods
-            _harmony = new Harmony(PluginInfo.PLUGIN_GUID);
+            _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
 
-            if (ConfigEnabled.Value)
+            LoadPlugin(ConfigEnabled.Value);
+        }
+
+        public static void LoadPlugin(bool enabled)
+        {
+            if (enabled)
             {
-                _harmony.PatchAll(typeof(AlwaysShowUraCrownsPatch));
-                Log.LogInfo($"Plugin {PluginInfo.PLUGIN_NAME} is loaded!");
+                bool result = true;
+                // If any PatchFile fails, result will become false
+                result &= Instance.PatchFile(typeof(AlwaysShowUraCrownsPatch));
+                if (result)
+                {
+                    ModLogger.Log($"Plugin {MyPluginInfo.PLUGIN_NAME} is loaded!");
+                }
+                else
+                {
+                    ModLogger.Log($"Plugin {MyPluginInfo.PLUGIN_GUID} failed to load.", LogType.Error);
+                    // Unload this instance of Harmony
+                    // I hope this works the way I think it does
+                    Instance._harmony.UnpatchSelf();
+                }
             }
             else
             {
-                Log.LogInfo($"Plugin {PluginInfo.PLUGIN_NAME} is disabled.");
+                ModLogger.Log($"Plugin {MyPluginInfo.PLUGIN_NAME} is disabled.");
+            }
+        }
+
+        private bool PatchFile(Type type)
+        {
+            if (_harmony == null)
+            {
+                _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
+            }
+            try
+            {
+                _harmony.PatchAll(type);
+                ModLogger.Log("File patched: " + type.FullName, LogType.Debug);
+                return true;
+            }
+            catch (Exception e)
+            {
+                ModLogger.Log("Failed to patch file: " + type.FullName);
+                ModLogger.Log(e.Message);
+                return false;
+            }
+        }
+
+        public static void UnloadPlugin()
+        {
+            Instance._harmony.UnpatchSelf();
+            ModLogger.Log($"Plugin {MyPluginInfo.PLUGIN_NAME} has been unpatched.");
+        }
+
+        public static void ReloadPlugin()
+        {
+            // Reloading will always be completely different per mod
+            // You'll want to reload any config file or save data that may be specific per profile
+            // If there's nothing to reload, don't put anything here, and keep it commented in AddToSaveManager
+            //SwapSongLanguagesPatch.InitializeOverrideLanguages();
+            //TaikoSingletonMonoBehaviour<CommonObjects>.Instance.MyDataManager.MusicData.Reload();
+        }
+
+        public void AddToSaveManager()
+        {
+            // Add SaveDataManager dll path to your csproj.user file
+            // https://github.com/Deathbloodjr/TDMX.SaveProfileManager
+            var plugin = new PluginSaveDataInterface(MyPluginInfo.PLUGIN_GUID);
+            plugin.AssignLoadFunction(LoadPlugin);
+            plugin.AssignUnloadFunction(UnloadPlugin);
+
+            // Reloading will always be completely different per mod
+            // You'll want to reload any config file or save data that may be specific per profile
+            // If there's nothing to reload, don't put anything here, and keep it commented in AddToSaveManager
+            //plugin.AssignReloadSaveFunction(ReloadPlugin);
+
+            // Uncomment this if there are more config options than just ConfigEnabled
+            //plugin.AssignConfigSetupFunction(SetupConfig);
+            plugin.AddToManager(ConfigEnabled.Value);
+        }
+
+        private bool IsSaveManagerLoaded()
+        {
+            try
+            {
+                Assembly loadedAssembly = Assembly.Load("com.DB.TDMX.SaveProfileManager");
+                return loadedAssembly != null;
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -80,11 +175,7 @@ namespace AlwaysShowUraCrowns
 
         public void StartCustomCoroutine(IEnumerator enumerator)
         {
-#if TAIKO_MONO
             GetMonoBehaviour().StartCoroutine(enumerator);
-#elif TAIKO_IL2CPP
-            GetMonoBehaviour().StartCoroutine(enumerator);
-#endif
         }
 
     }
